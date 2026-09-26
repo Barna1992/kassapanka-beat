@@ -9,6 +9,7 @@ const SIGNATURE_RE = /\b(\d{1,2})\s*\/\s*(2|4|8|16)\b/
 const EXPLICIT_BPM_RE = /(\d{2,3})(?:[.,]\d+)?\s*bpm\b|\bbpm\s*[:=]?\s*(\d{2,3})/i
 const LIST_INDEX_RE = /^\s*\d{1,3}\s*[.)\-–:]\s*/
 const DURATION_RE = /\b\d{1,2}[:']\d{2}\b/g
+const TRAILING_FIELD_RE = /\s[\-–—|•·]\s*(\d{2,3})\s*$/
 const EDGE_SEPARATORS_RE = /^[\s\-–—|•·:,;]+|[\s\-–—|•·:,;(\[]+$/g
 
 export function clampBpm(value) {
@@ -41,12 +42,13 @@ function parseLine(raw, explicitOnly) {
     if (inRange(n)) bpm = n
     text = text.replace(explicit[0], ' ')
   } else if (!explicitOnly) {
-    // No "bpm" label anywhere in the document: take the last plausible number.
-    const numbers = [...text.matchAll(/\b(\d{2,3})\b/g)]
-    const last = numbers.reverse().find((m) => inRange(Number(m[1])))
-    if (last) {
-      bpm = Number(last[1])
-      text = text.slice(0, last.index) + ' ' + text.slice(last.index + last[0].length)
+    // No "bpm" label anywhere in the document: accept a bare number only as its
+    // own trailing field ("Title – 140"), so band names like "Sum 41" or
+    // "blink-182" are not read as tempo.
+    const field = text.match(TRAILING_FIELD_RE)
+    if (field && inRange(Number(field[1]))) {
+      bpm = Number(field[1])
+      text = text.slice(0, field.index)
     }
   }
 
@@ -62,10 +64,17 @@ export function parseSetlistLines(lines) {
   // If the PDF labels tempos with "bpm", trust only those: stray numbers
   // (dates, "Blink 182") would otherwise be taken as tempo.
   const explicitOnly = nonEmpty.some((l) => EXPLICIT_BPM_RE.test(l))
-  const parsed = nonEmpty.map((l) => parseLine(l, explicitOnly)).filter((s) => s.title)
 
+  // In a numbered setlist the songs are exactly the numbered lines: this drops
+  // the band name, date and other headers without guessing.
+  const numbered = nonEmpty.filter((l) => LIST_INDEX_RE.test(l))
+  if (numbered.length >= 3 && numbered.length >= nonEmpty.length / 2) {
+    return numbered.map((l) => parseLine(l, explicitOnly)).filter((s) => s.title)
+  }
+
+  const parsed = nonEmpty.map((l) => parseLine(l, explicitOnly)).filter((s) => s.title)
   const withBpm = parsed.filter((s) => s.bpm !== null)
-  // A setlist where no line carries a tempo is still useful: import every line
-  // and let the user fill the BPM in the review step.
+  // Unnumbered list: lines with a tempo are the songs. If none has one,
+  // import every line and let the user fill the BPM in the review step.
   return withBpm.length > 0 ? withBpm : parsed
 }

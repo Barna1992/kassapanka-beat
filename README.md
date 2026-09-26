@@ -2,13 +2,16 @@
 
 Metronomo visivo + setlist per il batterista dei Kassapanka. Ispirato a Ironbeat.
 
-- **Carica PDF**: legge la scaletta (una riga per canzone) ed estrae titolo, BPM e tempo (es. `7/4`).
+- **Carica PDF**: legge la scaletta ed estrae le canzoni. Se le righe sono numerate
+  (`1. Titolo – Artista`) prende solo quelle, saltando nome del gruppo e data.
+  Se nel PDF ci sono i BPM li usa (`Titolo – 140 bpm`, `Titolo – 140`, `Titolo | 3:45 | 120`).
   Prima dell'import mostra una schermata di revisione per correggere/escludere le righe.
-  Formati riconosciuti, per esempio: `1. Titolo - 140 bpm`, `Titolo 140`, `Titolo | 3:45 | 120`.
   Serve un PDF con testo selezionabile (le scansioni non vengono lette).
+- **Memoria BPM**: quando il batterista cambia BPM o tempo di un brano, l'app se lo ricorda
+  per titolo e lo riapplica alle scalette successive. Priorità: PDF → ricordato → 120 (da impostare).
 - BPM e tempo modificabili a mano, tap tempo, click audio opzionale (di default spento).
 - Schermo sempre acceso mentre suona; funziona offline una volta installata (PWA).
-- La setlist è salvata nel browser del dispositivo.
+- Setlist e memoria BPM sono salvate nel browser del dispositivo.
 
 ## Sviluppo
 

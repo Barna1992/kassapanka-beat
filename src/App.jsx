@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMetronome } from './useMetronome.js'
 import { parseSetlistLines, clampBpm, DEFAULT_BPM } from './setlistParser.js'
+import { MEMORY_KEY, remember, buildReviewRows } from './bpmMemory.js'
 
 const STORAGE_KEY = 'kp-beat-setlist'
 const SIGNATURES = ['2/4', '3/4', '4/4', '5/4', '6/8', '7/8', '12/8']
@@ -13,6 +14,16 @@ function loadSaved() {
   } catch {}
   return { songs: [], selectedId: null }
 }
+
+function loadMemory() {
+  try {
+    return JSON.parse(localStorage.getItem(MEMORY_KEY)) || {}
+  } catch {
+    return {}
+  }
+}
+
+const SOURCE_LABEL = { pdf: 'dal PDF', memoria: 'ricordato', manuale: 'modificato', default: 'da impostare' }
 
 function SignatureSelect({ value, onChange, className }) {
   const options = SIGNATURES.includes(value) ? SIGNATURES : [...SIGNATURES, value]
@@ -58,16 +69,19 @@ function ImportReview({ fileName, rows, setRows, onConfirm, onCancel }) {
               <input type="checkbox" checked={row.include} onChange={(e) => update(i, { include: e.target.checked })} />
               <input className="field grow" value={row.title} onChange={(e) => update(i, { title: e.target.value })} />
               <BpmInput
-                className={`field bpm-field ${row.bpmFound ? '' : 'warn'}`}
+                className={`field bpm-field ${row.source === 'default' ? 'warn' : ''}`}
                 value={row.bpm}
-                onCommit={(bpm) => update(i, { bpm, bpmFound: true })}
+                onCommit={(bpm) => bpm !== row.bpm && update(i, { bpm, source: 'manuale' })}
               />
+              <span className={`bpm-source ${row.source}`}>{SOURCE_LABEL[row.source]}</span>
               <SignatureSelect className="field" value={row.timeSignature} onChange={(timeSignature) => update(i, { timeSignature })} />
             </div>
           ))}
         </div>
-        {rows.some((r) => r.include && !r.bpmFound) && (
-          <p className="warn-text">I BPM evidenziati non erano nel PDF: impostati a {DEFAULT_BPM}, controllali.</p>
+        {rows.some((r) => r.include && r.source === 'default') && (
+          <p className="warn-text">
+            I BPM evidenziati non sono né nel PDF né ricordati: impostati a {DEFAULT_BPM}. Quando li correggi l'app se li ricorda per le prossime scalette.
+          </p>
         )}
         <div className="modal-actions">
           <button className="btn" onClick={onCancel}>Annulla</button>
@@ -87,15 +101,28 @@ export default function App() {
   const [soundOn, setSoundOn] = useState(false)
   const [review, setReview] = useState(null)
   const [message, setMessage] = useState(null)
+  const [memory, setMemory] = useState(loadMemory)
   const taps = useRef([])
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ songs, selectedId }))
   }, [songs, selectedId])
 
+  useEffect(() => {
+    localStorage.setItem(MEMORY_KEY, JSON.stringify(memory))
+  }, [memory])
+
   const setSongs = (fn) => setState((s) => ({ ...s, songs: fn(s.songs) }))
   const select = (id) => setState((s) => ({ ...s, selectedId: id }))
-  const updateSong = (id, patch) => setSongs((list) => list.map((s) => (s.id === id ? { ...s, ...patch } : s)))
+  const updateSong = (id, patch) => {
+    setSongs((list) => list.map((s) => (s.id === id ? { ...s, ...patch } : s)))
+    // Only tempo edits are remembered: remembering on title edits would store
+    // every half-typed title as its own song.
+    if ('bpm' in patch || 'timeSignature' in patch) {
+      const song = songs.find((s) => s.id === id)
+      if (song) setMemory((m) => remember(m, { ...song, ...patch }))
+    }
+  }
 
   const index = songs.findIndex((s) => s.id === selectedId)
   const current = index >= 0 ? songs[index] : free
@@ -136,16 +163,7 @@ export default function App() {
         flash('error', 'Nessun testo trovato nel PDF (è una scansione? serve un PDF con testo selezionabile).')
         return
       }
-      setReview({
-        fileName: file.name,
-        rows: parsed.map((p) => ({
-          include: true,
-          title: p.title,
-          bpm: p.bpm ?? DEFAULT_BPM,
-          bpmFound: p.bpm !== null,
-          timeSignature: p.timeSignature ?? '4/4',
-        })),
-      })
+      setReview({ fileName: file.name, rows: buildReviewRows(parsed, memory) })
     } catch {
       flash('error', 'Impossibile leggere il PDF.')
     }
@@ -153,6 +171,8 @@ export default function App() {
 
   const confirmImport = (rows, mode) => {
     const imported = rows.map(({ title, bpm, timeSignature }) => ({ id: newId(), title: title.trim() || 'Senza titolo', bpm, timeSignature }))
+    // Placeholder tempos are not remembered, or they would later look like real ones.
+    setMemory((m) => rows.filter((r) => r.source !== 'default').reduce(remember, m))
     setState((s) => {
       const list = mode === 'replace' ? imported : [...s.songs, ...imported]
       return { songs: list, selectedId: mode === 'replace' ? imported[0].id : s.selectedId ?? imported[0].id }

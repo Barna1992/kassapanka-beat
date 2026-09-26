@@ -196,3 +196,11 @@ input[type='number']::-webkit-outer-spin-button { -webkit-appearance: none; marg
 .review-row.excluded { opacity: 0.4; }
 .warn-text { color: var(--pink); font-size: 0.85rem; }
 .modal-actions { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.bpm-source { font-size: 0.7rem; color: var(--bone-dim); width: 5.5em; flex-shrink: 0; }
+.bpm-source.default { color: var(--pink); }
+.bpm-source.memoria { color: var(--ok); }
+@media (max-width: 560px) {
+  .review-row { flex-wrap: wrap; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  .review-row .field.grow { flex-basis: calc(100% - 30px); }
+  .review-row .bpm-field { margin-left: 24px; }
+}
